@@ -1,0 +1,12 @@
+com\example\rpsservice\service\LocalRpsLimitHolder.class
+com\example\rpsservice\etcd\InstanceRegistry.class
+com\example\rpsservice\config\EtcdClientConfig.class
+com\example\rpsservice\config\RpsConfigLoader.class
+com\example\rpsservice\web\RpsLimitsController.class
+com\example\rpsservice\etcd\LeaderCoordinator$1.class
+com\example\rpsservice\RpsServiceApplication.class
+com\example\rpsservice\etcd\InstanceRegistry$1.class
+com\example\rpsservice\etcd\LeaderCoordinator.class
+com\example\rpsservice\etcd\InstanceRpsWatcher$1.class
+com\example\rpsservice\config\EtcdProperties.class
+com\example\rpsservice\etcd\InstanceRpsWatcher.class

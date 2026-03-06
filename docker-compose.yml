@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.13
+    container_name: etcd
+    command:
+      - /usr/local/bin/etcd
+      - --name
+      - s1
+      - --data-dir
+      - /etcd-data
+      - --advertise-client-urls
+      - http://0.0.0.0:2379
+      - --listen-client-urls
+      - http://0.0.0.0:2379
+      - --initial-advertise-peer-urls
+      - http://0.0.0.0:2380
+      - --listen-peer-urls
+      - http://0.0.0.0:2380
+      - --initial-cluster
+      - s1=http://0.0.0.0:2380
+      - --initial-cluster-token
+      - tkn
+      - --initial-cluster-state
+      - new
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+
+  rps-service-1:
+    build: .
+    depends_on:
+      - etcd
+    environment:
+      - INSTANCE_ID=node1
+      - SERVER_PORT=8081
+    command:
+      - java
+      - -jar
+      - /app/app.jar
+      - --instance.id=node1
+      - --server.port=8081
+      - --etcd.endpoints[0]=http://etcd:2379
+    ports:
+      - "8081:8081"
+
+  rps-service-2:
+    build: .
+    depends_on:
+      - etcd
+    environment:
+      - INSTANCE_ID=node2
+      - SERVER_PORT=8082
+    command:
+      - java
+      - -jar
+      - /app/app.jar
+      - --instance.id=node2
+      - --server.port=8082
+      - --etcd.endpoints[0]=http://etcd:2379
+    ports:
+      - "8082:8082"
+

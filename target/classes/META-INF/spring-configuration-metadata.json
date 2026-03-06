@@ -1,0 +1,32 @@
+{
+  "groups": [
+    {
+      "name": "etcd",
+      "type": "com.example.rpsservice.config.EtcdProperties",
+      "sourceType": "com.example.rpsservice.config.EtcdProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "etcd.endpoints",
+      "type": "java.util.List<java.lang.String>",
+      "sourceType": "com.example.rpsservice.config.EtcdProperties"
+    },
+    {
+      "name": "etcd.instance-ttl-seconds",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.rpsservice.config.EtcdProperties"
+    },
+    {
+      "name": "etcd.leader-ttl-seconds",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.rpsservice.config.EtcdProperties"
+    },
+    {
+      "name": "etcd.root-prefix",
+      "type": "java.lang.String",
+      "sourceType": "com.example.rpsservice.config.EtcdProperties"
+    }
+  ],
+  "hints": []
+}

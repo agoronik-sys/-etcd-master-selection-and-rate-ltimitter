@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: rps-etcd-service
+
+server:
+  port: 8080
+
+etcd:
+  endpoints:
+    - http://localhost:2379
+  root-prefix: /rps-service
+  instance-ttl-seconds: 10
+  leader-ttl-seconds: 10
+
+rps:
+  reconciliation-interval-ms: 30000
+
