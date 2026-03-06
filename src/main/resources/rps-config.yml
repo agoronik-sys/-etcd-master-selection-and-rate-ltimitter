@@ -5,4 +5,3 @@ rps-inbox:
     rps: 20
   - id: tc
     rps: 15
-

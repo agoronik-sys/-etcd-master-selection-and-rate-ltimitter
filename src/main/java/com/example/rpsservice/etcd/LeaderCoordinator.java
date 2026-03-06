@@ -48,11 +48,7 @@ public class LeaderCoordinator {
     private final long reconciliationIntervalMs;
 
     private final ScheduledExecutorService scheduler =
-            Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "rps-leader-scheduler");
-                t.setDaemon(true);
-                return t;
-            });
+            Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("rps-leader-scheduler").factory());
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
     private volatile boolean running = true;
@@ -85,9 +81,7 @@ public class LeaderCoordinator {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void start() {
-        Thread electionThread = new Thread(this::electionLoop, "rps-leader-election");
-        electionThread.setDaemon(true);
-        electionThread.start();
+        Thread.ofVirtual().name("rps-leader-election").start(this::electionLoop);
 
         scheduler.scheduleWithFixedDelay(this::safeRecalculateIfLeader,
                 reconciliationIntervalMs,
@@ -133,12 +127,14 @@ public class LeaderCoordinator {
 
             @Override
             public void onError(Throwable t) {
-                log.warn("Leader lease keepAlive error", t);
+                log.warn("Leader lease keepAlive error (etcd may be down), resigning to allow re-election", t);
+                resignFromLeadership();
             }
 
             @Override
             public void onCompleted() {
-                log.info("Leader lease keepAlive stream completed");
+                log.info("Leader lease keepAlive stream completed, resigning to allow re-election");
+                resignFromLeadership();
             }
         });
 
@@ -195,6 +191,52 @@ public class LeaderCoordinator {
         } catch (Exception e) {
             log.warn("Error while waiting for leader key to disappear", e);
         }
+    }
+
+    /**
+     * Снятие роли лидера при отвале etcd (keepAlive stream завершился/ошибка).
+     * Закрывает watcher и keepAlive, ревокает lease, сбрасывает флаг — цикл выбора лидера перезапустит попытки.
+     */
+    private void resignFromLeadership() {
+        if (!isLeader.compareAndSet(true, false)) {
+            return;
+        }
+        log.info("Instance {} resigned from leadership (etcd connection lost)", instanceRegistry.getInstanceId());
+        try {
+            if (instancesWatcher != null) {
+                try {
+                    instancesWatcher.close();
+                } catch (Exception e) {
+                    log.debug("Error closing instances watcher", e);
+                }
+                instancesWatcher = null;
+            }
+        } catch (Exception e) {
+            log.warn("Error closing instances watcher", e);
+        }
+        try {
+            if (leaderKeepAliveClient != null) {
+                leaderKeepAliveClient.close();
+                leaderKeepAliveClient = null;
+            }
+        } catch (Exception e) {
+            log.warn("Error closing leader keepAlive client", e);
+        }
+        try {
+            if (leaderLeaseId != 0L) {
+                long toRevoke = leaderLeaseId;
+                leaderLeaseId = 0L;
+                client.getLeaseClient().revoke(toRevoke).get(3, TimeUnit.SECONDS);
+            }
+        } catch (Exception e) {
+            log.debug("Error revoking leader lease (etcd may be down)", e);
+            leaderLeaseId = 0L;
+        }
+    }
+
+    /** Является ли этот инстанс лидером (для метрик и мониторинга). */
+    public boolean isCurrentLeader() {
+        return isLeader.get();
     }
 
     /** Переход в роль лидера: включает watch на instances и запускает первый перерасчёт (с debounce). */
@@ -285,15 +327,21 @@ public class LeaderCoordinator {
         }
 
         KV kv = client.getKVClient();
+        int success = 0;
         for (Map.Entry<String, Map<String, Integer>> entry : perInstance.entrySet()) {
             String instanceId = entry.getKey();
             Map<String, Integer> limits = entry.getValue();
             String key = properties.rpsPrefix() + "/" + instanceId;
-            String json = objectMapper.writeValueAsString(limits);
-            kv.put(bs(key), bs(json)).get(5, TimeUnit.SECONDS);
+            try {
+                String json = objectMapper.writeValueAsString(limits);
+                kv.put(bs(key), bs(json)).get(5, TimeUnit.SECONDS);
+                success++;
+            } catch (Exception e) {
+                log.warn("Failed to publish RPS for instance {} (will retry on next reconciliation)", instanceId, e);
+            }
         }
 
-        log.info("Published RPS distribution for {} instances", instances.size());
+        log.info("Published RPS distribution for {} of {} instances", success, instances.size());
     }
 
     /** Читает ключи под префиксом instances/, извлекает instanceId из пути, возвращает отсортированный список. */

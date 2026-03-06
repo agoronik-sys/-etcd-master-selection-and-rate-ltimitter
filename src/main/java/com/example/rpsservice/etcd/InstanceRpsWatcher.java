@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Следит за ключом /rps-service/rps/{instanceId} в etcd: при изменении парсит JSON и обновляет локальные лимиты в {@link LocalRpsLimitHolder}.
+ * При восстановлении соединения с etcd ({@link EtcdReconnectedEvent}) переподключает watch и перечитывает лимиты.
  */
 @Component
 public class InstanceRpsWatcher {
@@ -34,6 +35,7 @@ public class InstanceRpsWatcher {
     private final ObjectMapper objectMapper;
 
     private volatile Watch.Watcher watcher;
+    private volatile ByteSequence rpsKey;
 
     public InstanceRpsWatcher(
             Client client,
@@ -55,9 +57,28 @@ public class InstanceRpsWatcher {
     @EventListener(ApplicationReadyEvent.class)
     public void start() {
         String key = properties.rpsPrefix() + "/" + instanceRegistry.getInstanceId();
-        ByteSequence bsKey = ByteSequence.from(key, StandardCharsets.UTF_8);
-        readInitialValue(bsKey);
-        startWatch(bsKey);
+        this.rpsKey = ByteSequence.from(key, StandardCharsets.UTF_8);
+        readInitialValue(rpsKey);
+        startWatch(rpsKey);
+    }
+
+    /**
+     * При восстановлении соединения с etcd: закрывает старый watch, заново читает лимиты и подписывается на watch.
+     * Это обеспечивает получение RPS после перезапуска etcd без перезапуска сервиса.
+     */
+    @EventListener(EtcdReconnectedEvent.class)
+    public void onEtcdReconnected() {
+        if (rpsKey == null) {
+            return;
+        }
+        try {
+            closeWatcher();
+            readInitialValue(rpsKey);
+            startWatch(rpsKey);
+            log.info("RPS watch re-established after etcd reconnection");
+        } catch (Exception e) {
+            log.warn("Failed to re-establish RPS watch after etcd reconnection", e);
+        }
     }
 
     /** Читает текущее значение ключа RPS из etcd и обновляет {@link LocalRpsLimitHolder}. */
@@ -107,16 +128,21 @@ public class InstanceRpsWatcher {
         }
     }
 
-    /** При остановке контекста закрывает watcher. */
-    @javax.annotation.PreDestroy
-    public void shutdown() {
+    private void closeWatcher() {
         try {
             if (watcher != null) {
                 watcher.close();
+                watcher = null;
             }
         } catch (Exception e) {
-            log.warn("Error closing RPS watcher", e);
+            log.debug("Error closing RPS watcher", e);
         }
+    }
+
+    /** При остановке контекста закрывает watcher. */
+    @javax.annotation.PreDestroy
+    public void shutdown() {
+        closeWatcher();
     }
 }
 

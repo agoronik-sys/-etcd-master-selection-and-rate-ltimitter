@@ -3,7 +3,13 @@ spring:
     name: rps-etcd-service
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
+
+# Идентификатор инстанса в кластере (в etcd: /instances/{id}, /rps/{id}).
+# Задаётся переменной окружения INSTANCE_ID (в K8s: valueFrom.fieldRef.metadata.name).
+# Если пусто — генерируется node-{UUID}.
+instance:
+  id: ${INSTANCE_ID:}
 
 etcd:
   endpoints:
@@ -11,7 +17,31 @@ etcd:
   root-prefix: /rps-service
   instance-ttl-seconds: 10
   leader-ttl-seconds: 10
+  # TLS: в прод среде включить и указать keystore/truststore
+  ssl:
+    enabled: false
+    # Keystore — клиентский сертификат для mutual TLS (file: или classpath:)
+    keystore-path:       # file:/path/to/client.pfx  или  classpath:etcd-client.pfx
+    keystore-password:  # пароль к keystore
+    keystore-type: PKCS12   # PKCS12 или JKS
+    # Truststore — CA для проверки сервера (если не задано — системный trust store JVM)
+    trust-store-path:       # file:/path/to/trust.pfx  или  classpath:etcd-trust.pfx
+    trust-store-password:   # пароль к truststore
+    trust-store-type: PKCS12   # PKCS12 или JKS
 
 rps:
   reconciliation-interval-ms: 30000
+
+# Prometheus: метрики на /actuator/prometheus
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
 

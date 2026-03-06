@@ -33,13 +33,12 @@ services:
     depends_on:
       - etcd
     environment:
-      - INSTANCE_ID=node1
-      - SERVER_PORT=8081
+      INSTANCE_ID: node1
+      SERVER_PORT: 8081
     command:
       - java
       - -jar
       - /app/app.jar
-      - --instance.id=node1
       - --server.port=8081
       - --etcd.endpoints[0]=http://etcd:2379
     ports:
@@ -50,13 +49,12 @@ services:
     depends_on:
       - etcd
     environment:
-      - INSTANCE_ID=node2
-      - SERVER_PORT=8082
+      INSTANCE_ID: node2
+      SERVER_PORT: 8082
     command:
       - java
       - -jar
       - /app/app.jar
-      - --instance.id=node2
       - --server.port=8082
       - --etcd.endpoints[0]=http://etcd:2379
     ports:
